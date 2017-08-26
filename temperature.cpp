@@ -46,7 +46,7 @@ int current_temperature_bed_raw = 0;
 float current_temperature_bed = 0.0;
 bool allow_temperature_sensor_errors[EXTRUDERS] = ARRAY_BY_EXTRUDERS_INIT(true);
 bool hotend_present[EXTRUDERS] = ARRAY_BY_EXTRUDERS_INIT(false);
-//Heater output accumulators, this is used to have M105 report the average heating output sinds last report instead of just the "current" output which fluctuates too fast.
+//Heater output accumulators, this is used to have M105 report the average heating output since last report instead of just the "current" output which fluctuates too fast.
 uint16_t heater_output_accumulator[EXTRUDERS] = ARRAY_BY_EXTRUDERS_INIT(0);
 uint16_t heater_output_accumulator_counter[EXTRUDERS] = ARRAY_BY_EXTRUDERS_INIT(0);
 uint16_t bed_heater_output_accumulator = 0;
@@ -59,7 +59,7 @@ bool stop_heaters_pwm = false;
 //===========================================================================
 static volatile bool temp_meas_ready = false;
 
-// 60 degC is hot but usually not too hot to hold  and it is also not a expected ambient temperature.
+// 60 degC is hot but usually not too hot to handle and it is also not an expected ambient temperature.
 #define HOTEND_HUMAN_TOUCHABLE_TEMPERATURE 60
 
 // Init min and max temp with extreme values to prevent false errors during startup
@@ -312,16 +312,17 @@ static void updateTemperaturesFromRawValues()
     // Reset the watchdog after we know we have a temperature measurement.
     watchdog_reset();
 
-    CRITICAL_SECTION_START;
-    temp_meas_ready = false;
-    CRITICAL_SECTION_END;
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+    {
+        temp_meas_ready = false;
+    }
 }
 
 /**
  * Initialize the temperature manager
  * The manager is implemented by periodic calls to manage_heater()
  */
-void tp_init()
+void temperatureInit()
 {
 #if defined(HEATER_0_USES_ADS101X) || defined(HEATER_1_USES_ADS101X) || defined(HEATER_2_USES_ADS101X) || defined(BED_USES_ADS101X)
     initTemperatureADS101X();

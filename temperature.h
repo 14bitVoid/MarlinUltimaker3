@@ -18,8 +18,8 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef temperature_h
-#define temperature_h
+#ifndef TEMPERATURE_H
+#define TEMPERATURE_H
 
 #include "Marlin.h"
 #include "planner.h"
@@ -27,7 +27,7 @@
 #include "PowerBudgetManagement.h"
 
 // public functions
-void tp_init();  //initialise the heating
+void temperatureInit(); //initialise the heating
 void manage_heater(); //it is critical that this is called periodically.
 
 extern TemperaturePID hotend_pid[EXTRUDERS];
@@ -62,8 +62,8 @@ FORCE_INLINE float degBed() {
 void disable_all_heaters();
 
 // Set if the hotend is allowed to be removed or not.
-// We can only set this when the target temperature is 0 and when the hotend is cooler then 70C
-// When it is set, temperature sensor error are suppressed, and no heating is allowed.
+// We can only set this when the target temperature is 0 and when the hotend is cooler than 70C.
+// When it is set, temperature sensor errors are suppressed, and no heating is allowed.
 void setAllowHotendRemoval(uint8_t extruder, bool allow_removal);
 
-#endif
+#endif  // TEMPERATURE_H

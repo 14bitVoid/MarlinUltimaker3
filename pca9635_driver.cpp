@@ -3,9 +3,11 @@
 #include "Marlin.h"
 
 #define PCA9635_ADDRESS 0b1000100
+#define PCA9635_OUTPUT_COUNT 16
 
 static i2cCommand update_command;
-static uint8_t update_buffer[17];
+static uint8_t output_values[PCA9635_OUTPUT_COUNT];
+static uint8_t update_buffer[PCA9635_OUTPUT_COUNT+1];
 
 void initPCA9635()
 {
@@ -30,38 +32,52 @@ void initPCA9635()
 
     //Setup the update buffer.
     update_buffer[0] = 0x82; //Start at PWM0 with auto increase.
-    for(uint8_t n=1; n<17; n++)
-        update_buffer[n] = 0x00;
+    for(uint8_t n=0; n<PCA9635_OUTPUT_COUNT; n++)
+    {
+        update_buffer[n+1] = 0x00;
+        output_values[n] = 0x00;
+    }
 
     i2cDriverExecuteAndWait(&init_command);
 }
 
-void setupPCA9635output(uint8_t channel, uint8_t value)
+void setPCA9635output(uint8_t channel, uint8_t value)
 {
-    if (channel > 15)
+    if (channel >= PCA9635_OUTPUT_COUNT)
         return;
-    update_buffer[channel + 1] = value;
+    output_values[channel] = value;
 }
 
-void executePCA9635output()
+void updatePCA9635()
 {
     if (update_command.finished)
-        i2cDriverPlan(&update_command);
+    {
+        bool update = false;
+        for(uint8_t n=0; n<PCA9635_OUTPUT_COUNT; n++)
+        {
+            if (output_values[n] != update_buffer[n + 1])
+            {
+                update = true;
+                update_buffer[n + 1] = output_values[n];
+            }
+        }
+        if (update)
+            i2cDriverPlan(&update_command);
+    }
 }
 
 void setPCA9635led(uint8_t tool, uint8_t red, uint8_t green, uint8_t blue)
 {
     if (tool == 0)
     {
-        setupPCA9635output(10, blue);
-        setupPCA9635output(11, green);
-        setupPCA9635output(12, red);
+        setPCA9635output(12, red);
+        setPCA9635output(11, green);
+        setPCA9635output(10, blue);
     }
     else
     {
-        setupPCA9635output(13, red);
-        setupPCA9635output(14, green);
-        setupPCA9635output(15, blue);
+        setPCA9635output(13, red);
+        setPCA9635output(14, green);
+        setPCA9635output(15, blue);
     }
-    executePCA9635output();
 }

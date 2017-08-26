@@ -3,10 +3,11 @@
 
 #define MSG_OK "ok"
 
-#define MSG_ERR_LINE_NO "Line Number is not Last Line Number+1, Last Line: "
-#define MSG_ERR_CHECKSUM_MISMATCH "checksum mismatch, Last Line: "
-#define MSG_ERR_NO_CHECKSUM "No Checksum with line number, Last Line: "
-#define MSG_ERR_NO_LINENUMBER_WITH_CHECKSUM "No Line Number with checksum, Last Line: "
+#define MSG_ERR_UNEXPECTED_SEQUENCE_NUMBER "Sequence number is unexpected (received, expected): "
+#define MSG_ERR_PAYLOAD_SIZE_TOO_BIG "Payload size is too big for packet with sequence number: "
+#define MSG_ERR_PAYLOAD_ILLEGAL_CHARACTER "Payload byte not in acceptable (ASCII) range at position #"
+#define MSG_ERR_PACKET_UNHANDLED "Received packet could not be handled (buffer full), packet with sequence number: "
+#define MSG_ERR_CRC_MISMATCH "Checksum mismatch for packet with sequence number: "
 
 #define MSG_ERR_STOPPED "Printer stopped due to errors. Fix the error and use M999 to restart. (Temperature is reset. Set it after restarting)"
 #define MSG_RESEND "Resend: "

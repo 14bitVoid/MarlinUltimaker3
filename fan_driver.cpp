@@ -37,8 +37,7 @@ void setFanSpeed(uint8_t fan_location, uint8_t fan_speed)
         return;
     }
 
-    setupPCA9635output(fan_location, 255 - fan_speed);
-    executePCA9635output();
+    setPCA9635output(fan_location, 255 - fan_speed);
 }
 
 void setCoolingFanSpeed(uint8_t fan_speed)

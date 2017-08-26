@@ -9,11 +9,12 @@ void initPCA9635();
  *  @param channel The channel to write to
  *  @param value The value to write
  */
-void setupPCA9635output(uint8_t channel, uint8_t value);
+void setPCA9635output(uint8_t channel, uint8_t value);
 
-/** @brief Executes the command to write the values previously setup.
-*/
-void executePCA9635output();
+/** @brief Check if the PCA9635 needs to be updated, and schedule an update command it required.
+ *  This should be called from the main loop.
+ */
+void updatePCA9635();
 
 /** @brief sets head led x to a specific rgb color
  *  @param tool the toolhead

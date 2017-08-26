@@ -1,5 +1,5 @@
 /*
-  This code contibuted by Triffid_Hunter and modified by Kliment
+  This code contributed by Triffid_Hunter and modified by Kliment
   why double up on these macros? see http://gcc.gnu.org/onlinedocs/cpp/Stringification.html
 */
 
@@ -7,6 +7,7 @@
 #define	_FASTIO_ARDUINO_H
 
 #include <avr/io.h>
+#include <util/atomic.h>
 
 /*
   utility functions
@@ -25,19 +26,17 @@
 /// Read a pin
 #define _READ(IO) ((bool)(DIO ## IO ## _RPORT & MASK(DIO ## IO ## _PIN)))
 /// write to a pin
-// On some boards pins > 0x100 are used. These are not converted to atomic actions. An critical section is needed.
+// On some boards pins > 0x100 are used. These are not converted to atomic actions. A critical section is needed.
 
 #define _WRITE_NC(IO, v)  do { if (v) {DIO ##  IO ## _WPORT |= MASK(DIO ## IO ## _PIN); } else {DIO ##  IO ## _WPORT &= ~MASK(DIO ## IO ## _PIN); }; } while (0)
 
 #define _WRITE_C(IO, v)   do { if (v) { \
-                                         CRITICAL_SECTION_START; \
+                                         ATOMIC_BLOCK(ATOMIC_RESTORESTATE) \
                                          {DIO ##  IO ## _WPORT |= MASK(DIO ## IO ## _PIN); }\
-                                         CRITICAL_SECTION_END; \
                                        }\
                                        else {\
-                                         CRITICAL_SECTION_START; \
+                                         ATOMIC_BLOCK(ATOMIC_RESTORESTATE) \
                                          {DIO ##  IO ## _WPORT &= ~MASK(DIO ## IO ## _PIN); }\
-                                         CRITICAL_SECTION_END; \
                                        }\
                                      }\
                                      while (0)
@@ -49,7 +48,7 @@
 #endif
 
 /// toggle a pin
-#define _TOGGLE(IO)  do {DIO ##  IO ## _RPORT = MASK(DIO ## IO ## _PIN); } while (0)
+#define _TOGGLE(IO)  do { ATOMIC_BLOCK(ATOMIC_RESTORESTATE) { DIO ##  IO ## _RPORT ^= MASK(DIO ## IO ## _PIN); } } while (0)
 
 /// set pin as input
 #define	_SET_INPUT(IO) do {DIO ##  IO ## _DDR &= ~MASK(DIO ## IO ## _PIN); } while (0)
@@ -84,7 +83,7 @@
 /// check if pin is an output wrapper
 #define GET_OUTPUT(IO)  _GET_OUTPUT(IO)
 
-/// check if pin is an timer wrapper
+/// check if pin is a timer wrapper
 #define GET_TIMER(IO)  _GET_TIMER(IO)
 
 /*

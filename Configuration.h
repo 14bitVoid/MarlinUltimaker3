@@ -38,7 +38,7 @@
 #define TEMP_SENSOR_2 0
 #define TEMP_SENSOR_BED 20
 
-// The minimal temperature defines the temperature below which the heater will not be enabled It is used
+// The minimum temperature defines the temperature below which the heater will not be enabled It is used
 // to check that the wiring to the thermistor is not broken.
 // Otherwise this would lead to the heater being powered on all the time.
 #define HEATER_0_MINTEMP 5
@@ -152,17 +152,17 @@ const bool Z_ENDSTOPS_INVERTING = true; // set to true to invert the logic of th
 
 // default settings
 
-#define DEFAULT_AXIS_STEPS_PER_UNIT   {80.0,80.0,200,369}  // default steps per unit for Ultimaker Jedi
+#define DEFAULT_AXIS_STEPS_PER_UNIT   {80.0,80.0,200,369}   // default steps per unit for Ultimaker UM3
 #define DEFAULT_MAX_FEEDRATE          {300, 300, 40, 45}    // (mm/sec)
-#define DEFAULT_MAX_ACCELERATION      {9000,9000,100,10000}    // X, Y, Z, E maximum start speed for accelerated moves. E default values are good for skeinforge 40+, for older versions raise them a lot.
+#define DEFAULT_MAX_ACCELERATION      {9000,9000,100,10000} // X, Y, Z, E maximum start speed for accelerated moves. E default values are good for skeinforge 40+, for older versions raise them a lot.
 
-#define DEFAULT_ACCELERATION          3000    // X, Y, Z and E max acceleration in mm/s^2 for printing moves
-#define DEFAULT_RETRACT_ACCELERATION  3000   // X, Y, Z and E max acceleration in mm/s^2 for retracts
+#define DEFAULT_ACCELERATION          3000      // X, Y, Z and E max acceleration in mm/s^2 for printing moves
+#define DEFAULT_RETRACT_ACCELERATION  3000      // X, Y, Z and E max acceleration in mm/s^2 for retracts
 
 // The speed change that does not require acceleration (i.e. the software might assume it can be done instantaneously)
-#define DEFAULT_XYJERK                20.0    // (mm/sec)
-#define DEFAULT_ZJERK                 0.4     // (mm/sec)
-#define DEFAULT_EJERK                 5.0    // (mm/sec)
+#define DEFAULT_XYJERK                20.0      // (mm/sec)
+#define DEFAULT_ZJERK                 0.4       // (mm/sec)
+#define DEFAULT_EJERK                 5.0       // (mm/sec)
 
 //===========================================================================
 //=============================Additional Features===========================
@@ -173,31 +173,30 @@ const bool Z_ENDSTOPS_INVERTING = true; // set to true to invert the logic of th
 
 #define ENABLE_BED_LEVELING_PROBE
 #ifdef ENABLE_BED_LEVELING_PROBE
-# define CONFIG_BED_LEVELING_CALIBRATION_DISTANCE 4
-# define CONFIG_BED_LEVELING_Z_MOVE_DISTANCE 10
-# define CONFIG_FALL_OFF_BED_LEVELING_HEIGHT 10.0 // height at which to start reducing the amount of z correction
-# define CONFIG_MAX_BED_LEVELING_HEIGHT 20.0      // height at which z correction will no longer needed.
-// The capacitive sensor code has 2 buffers. A linear line is plotted over each buffer, the point between
-// these lines is called the inflection point, the angle is the amount of inflection, when the angle is maximized it is assumed
-// to be at the height the nozzle touches the bed. These values are calibrated to work with the sample frequency, the speed of movement,
-// the distance moved and the size of integers used in calculation(overflow etc), please be careful.
-# define CONFIG_BED_LEVEL_SENSOR_SAMPLE_COUNT1 100
-# define CONFIG_BED_LEVEL_SENSOR_SAMPLE_COUNT2 100
-# define CONFIG_BED_LEVELING_Z_HEIGHT 7
-# define CONFIG_BED_LEVELING_PEAK_DET1 1200000UL
-# define CONFIG_BED_LEVELING_PEAK_DET2N 3 // numerator
-# define CONFIG_BED_LEVELING_PEAK_DET2D 4 // denominator
-
+  # define CONFIG_BED_LEVELING_CALIBRATION_DISTANCE 4
+  # define CONFIG_BED_LEVELING_Z_MOVE_DISTANCE 10
+  # define CONFIG_FALL_OFF_BED_LEVELING_HEIGHT 10.0 // height at which to start reducing the amount of Z-correction
+  # define CONFIG_MAX_BED_LEVELING_HEIGHT 20.0      // height at which Z-correction is no longer applied.
+  // The capacitive sensor code has 2 buffers. A linear line is plotted over each buffer, the point between
+  // these lines is called the inflection point, the angle is the amount of inflection, when the angle is maximized it is assumed
+  // to be at the height the nozzle touches the bed. These values are calibrated to work with the sample frequency, the speed of movement,
+  // the distance moved and the size of integers used in calculation(overflow etc), please be careful.
+  # define CONFIG_BED_LEVEL_SENSOR_SAMPLE_COUNT1 100
+  # define CONFIG_BED_LEVEL_SENSOR_SAMPLE_COUNT2 100
+  # define CONFIG_BED_LEVELING_Z_HEIGHT 7
+  # define CONFIG_BED_LEVELING_PEAK_DET1 1200000UL
+  # define CONFIG_BED_LEVELING_PEAK_DET2N 3     // numerator
+  # define CONFIG_BED_LEVELING_PEAK_DET2D 4     // denominator
 #endif//ENABLE_BED_LEVELING_PROBE
 
 #define ENABLE_MONITOR_SERIAL_INPUT // Implement monitoring getting commands to be executed
 #ifdef ENABLE_MONITOR_SERIAL_INPUT
-#define MONITOR_SERIAL_INPUT_TIMEOUT 5 * 60     // Timeout for 5 minutes: after this time of no communication received, marlin will stop the heating of hotends and bed.
-#define MONITOR_MINIMUM_BED_TEMPERATURE    50   // Minimum temperature threshold for marking the bed as hot
-#define MONITOR_MINIMUM_HOTEND_TEMPERATURE 50   // Minimum temperature threshold for marking the hotend as hot
+  #define MONITOR_SERIAL_INPUT_TIMEOUT 5 * 60       // Timeout for 5 minutes: after this time of no communication received, marlin will stop the heating of hotends and bed.
+  #define MONITOR_MINIMUM_BED_TEMPERATURE    50     // Minimum temperature threshold for marking the bed as hot
+  #define MONITOR_MINIMUM_HOTEND_TEMPERATURE 50     // Minimum temperature threshold for marking the hotend as hot
 #endif//ENABLE_MONITOR_SERIAL_INPUT
 
 #include "Configuration_adv.h"
 #include "thermistortables.h"
 
-#endif //__CONFIGURATION_H
+#endif // CONFIGURATION_H

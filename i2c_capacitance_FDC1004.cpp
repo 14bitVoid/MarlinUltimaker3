@@ -52,10 +52,10 @@ void i2cCapacitanceInit()
     i2cCommand i2cSensorInitCommand;
     uint8_t i2cSensorInitBuffer[3];
 
-    i2cDriverCommandSetup(i2cSensorWriteCommand, I2C_SENSOR_ADDRESS << 1 | I2C_WRITE_BIT, I2C_QUEUE_PRIO_MEDIUM, i2cSensorWriteBuffer, sizeof(i2cSensorWriteBuffer));
-    i2cDriverCommandSetup(i2cSensorReadCommand, I2C_SENSOR_ADDRESS << 1 | I2C_READ_BIT, I2C_QUEUE_PRIO_MEDIUM, i2cSensorReadBuffer, sizeof(i2cSensorReadBuffer));
+    i2cDriverCommandSetup(i2cSensorWriteCommand, I2C_SENSOR_ADDRESS << 1 | I2C_WRITE_BIT, I2C_QUEUE_PRIO_HIGH, i2cSensorWriteBuffer, sizeof(i2cSensorWriteBuffer));
+    i2cDriverCommandSetup(i2cSensorReadCommand, I2C_SENSOR_ADDRESS << 1 | I2C_READ_BIT, I2C_QUEUE_PRIO_HIGH, i2cSensorReadBuffer, sizeof(i2cSensorReadBuffer));
 
-    i2cDriverCommandSetup(i2cSensorInitCommand, I2C_SENSOR_ADDRESS << 1 | I2C_WRITE_BIT, I2C_QUEUE_PRIO_MEDIUM, i2cSensorInitBuffer, sizeof(i2cSensorInitBuffer));
+    i2cDriverCommandSetup(i2cSensorInitCommand, I2C_SENSOR_ADDRESS << 1 | I2C_WRITE_BIT, I2C_QUEUE_PRIO_HIGH, i2cSensorInitBuffer, sizeof(i2cSensorInitBuffer));
 
     i2cSensorInitBuffer[0] = ADDR_FDC_CONF;
     i2cSensorInitBuffer[1] = FDC_CONF_MSB_RATE_100HZ | FDC_CONF_MSB_REPEAT;
@@ -70,7 +70,7 @@ void i2cCapacitanceReset()
     i2cCommand i2cSensorResetCommand;
     uint8_t i2cSensorResetBuffer[2];
 
-    i2cDriverCommandSetup(i2cSensorResetCommand, I2C_SENSOR_ADDRESS << 1 | I2C_WRITE_BIT, I2C_QUEUE_PRIO_MEDIUM, i2cSensorResetBuffer, sizeof(i2cSensorResetBuffer));
+    i2cDriverCommandSetup(i2cSensorResetCommand, I2C_SENSOR_ADDRESS << 1 | I2C_WRITE_BIT, I2C_QUEUE_PRIO_HIGH, i2cSensorResetBuffer, sizeof(i2cSensorResetBuffer));
 
     i2cSensorResetBuffer[0] = ADDR_FDC_CONF;
     i2cSensorResetBuffer[1] = FDC_CONF_MSB_RESET;
@@ -82,7 +82,7 @@ void i2cCapacitanceSetCAPDAC(uint8_t value)
     i2cCommand i2cSensorCapdacCommand;
     uint8_t i2cSensorCapdacBuffer[3];
 
-    i2cDriverCommandSetup(i2cSensorCapdacCommand, I2C_SENSOR_ADDRESS << 1 | I2C_WRITE_BIT, I2C_QUEUE_PRIO_MEDIUM, i2cSensorCapdacBuffer, sizeof(i2cSensorCapdacBuffer));
+    i2cDriverCommandSetup(i2cSensorCapdacCommand, I2C_SENSOR_ADDRESS << 1 | I2C_WRITE_BIT, I2C_QUEUE_PRIO_HIGH, i2cSensorCapdacBuffer, sizeof(i2cSensorCapdacBuffer));
 
     i2cSensorCapdacBuffer[0] = ADDR_CONF_MEAS(0);
 

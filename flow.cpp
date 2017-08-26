@@ -10,11 +10,11 @@
 #define SENSOR_STEPS_PER_EXTRUSION_STEPS (axis_steps_per_unit[E_AXIS] / (1.0 / (SENSOR_WHEEL_CIRCUM / 16384)
 */
 
-#define MAX_MILLIS_FLOW_POSITION      (2000UL)
+#define MAX_MILLIS_FLOW_POSITION        2000UL
 //50 flow sensor steps equals 77.6 extrusion steps, add a bit of a safety margin for noise.
-#define MIN_DELTA_FLOW_POSITION       (100)
-#define MIN_DELTA_ANGLE               (50)
-#define MAX_COUNT_FILAMENT_FLOW_ERROR (2)
+#define MIN_DELTA_FLOW_POSITION         100
+#define MIN_DELTA_ANGLE                 50
+#define MAX_COUNT_FILAMENT_FLOW_ERROR   2
 
 struct flow_sensor_data
 {

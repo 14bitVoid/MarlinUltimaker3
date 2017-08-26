@@ -90,8 +90,8 @@ float planner_bed_leveling_factor[2];
 //=================semi-private variables, used in inline  functions    =====
 //===========================================================================
 block_t block_buffer[BLOCK_BUFFER_SIZE];            // A ring buffer for motion instructions
-volatile unsigned char block_buffer_head;           // Index of the next block to be pushed
-volatile unsigned char block_buffer_tail;           // Index of the block to process now
+volatile uint8_t block_buffer_head;                 // Index of the next block to be pushed
+volatile uint8_t block_buffer_tail;                 // Index of the block to process now
 
 //===========================================================================
 //=============================private variables ============================
@@ -107,7 +107,7 @@ static int8_t next_block_index(int8_t block_index) {
   if (block_index == BLOCK_BUFFER_SIZE) {
     block_index = 0;
   }
-  return(block_index);
+  return block_index;
 }
 
 
@@ -117,7 +117,7 @@ static int8_t prev_block_index(int8_t block_index) {
     block_index = BLOCK_BUFFER_SIZE;
   }
   block_index--;
-  return(block_index);
+  return block_index;
 }
 
 //===========================================================================
@@ -188,14 +188,16 @@ void calculate_trapezoid_for_block(block_t *block, float entry_factor, float exi
 
   // block->accelerate_until = accelerate_steps;
   // block->decelerate_after = accelerate_steps+plateau_steps;
-  CRITICAL_SECTION_START;  // Fill variables used by the stepper in a critical section
-  if(block->busy == false) { // Don't update variables if block is busy.
-    block->accelerate_until = accelerate_steps;
-    block->decelerate_after = accelerate_steps+plateau_steps;
-    block->initial_rate = initial_rate;
-    block->final_rate = final_rate;
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+  {
+    // Fill variables used by the stepper in a critical section
+    if(block->busy == false) { // Don't update variables if block is busy.
+      block->accelerate_until = accelerate_steps;
+      block->decelerate_after = accelerate_steps+plateau_steps;
+      block->initial_rate = initial_rate;
+      block->final_rate = final_rate;
+    }
   }
-  CRITICAL_SECTION_END;
 }
 
 // Calculates the maximum allowable speed at this point when you must be able to reach target_velocity using the
@@ -244,11 +246,13 @@ void planner_reverse_pass_kernel(block_t *previous, block_t *current, block_t *n
 // implements the reverse pass.
 void planner_reverse_pass() {
   uint8_t block_index = block_buffer_head;
+  unsigned char tail;
 
   //Make a local copy of block_buffer_tail, because the interrupt can alter it
-  CRITICAL_SECTION_START;
-  unsigned char tail = block_buffer_tail;
-  CRITICAL_SECTION_END
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+  {
+    tail = block_buffer_tail;
+  }
 
   if(((block_buffer_head-tail + BLOCK_BUFFER_SIZE) & (BLOCK_BUFFER_SIZE - 1)) > 3) {
     block_index = (block_buffer_head - 3) & (BLOCK_BUFFER_SIZE - 1);
@@ -417,12 +421,11 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
     manage_inactivity();
   }
 
-  // The target position of the tool in absolute steps
-  // Calculate target position in absolute steps
-  //this should be done after the wait, because otherwise a M92 code within the gcode disrupts this calculation somehow
-  long target[4];
+  // The target position of the tool in absolute steps.
+  // Calculate target position in absolute steps.
+  // This should be done after the wait, because otherwise a M92 code within the gcode disrupts this calculation somehow.
+  long target[NUM_AXIS];
   target[X_AXIS] = lround(x*axis_steps_per_unit[X_AXIS]);
-
   target[Y_AXIS] = lround(y*axis_steps_per_unit[Y_AXIS]);
 #ifdef ENABLE_BED_LEVELING_PROBE
   float bed_leveling_factor = 0.0;

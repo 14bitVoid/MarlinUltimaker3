@@ -34,7 +34,7 @@
 
 FORCE_INLINE void store_char(unsigned char c)
 {
-  int i = (unsigned int)(rx_buffer.head + 1) % RX_BUFFER_SIZE;
+  uint8_t i = (uint16_t(rx_buffer.head) + 1) % RX_BUFFER_SIZE;
 
   // if we should be storing the received character into the location
   // just before the tail (meaning that the head would advance to the

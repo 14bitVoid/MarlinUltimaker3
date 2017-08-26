@@ -43,6 +43,7 @@
 #include "flow_AS5048B.h"
 #include "i2c_onewire_ds2482.h"
 #include "oneWireDS2431_eeprom.h"
+#include "SerialProtocol.h"
 
 //Add the compile date and time to the begining of the .text section.
 // What does this mean? It means the compile date and time is added at the start of code in the flash.
@@ -84,6 +85,7 @@ char compile_date_time[] __attribute__((section(".vectors"))) __attribute__((use
 // M84  - Disable steppers until next move
 // M92  - Set axis_steps_per_unit - same syntax as G92
 // M114 - Output current position to serial port
+// M115 - Get Firmware Version and Capabilities
 // M140 - Set bed target temp
 // M142 - Set system lights (M142 r[0-255] g[0-255] b[0-255] w[0-255])
 // M143 - Set hotend light (M143 r[0-255] g[0-255] b[0-255] T[0-1])
@@ -121,6 +123,7 @@ char compile_date_time[] __attribute__((section(".vectors"))) __attribute__((use
 // M12001 - Set build volume minimum position (M12000 X0 Y0 Z0)
 //          The minimum and maximum position combined define the build volume for the printer. They also define the default homing coordinates.
 // M12002 - Enable/disable the flow sensor hardware.
+// M12003 - Get board type
 
 
 //Stepper Movement Variables
@@ -133,6 +136,8 @@ char compile_date_time[] __attribute__((section(".vectors"))) __attribute__((use
 //===========================================================================
 //=============================public variables=============================
 //===========================================================================
+BoardType board_type = BOARD_UNKNOWN;
+
 float homing_feedrate[] = HOMING_FEEDRATE;
 bool axis_relative_modes[] = { false, false, false, false };
 int feedmultiply = 100; //100->1 200->2
@@ -156,22 +161,23 @@ const char axis_codes[NUM_AXIS] = {'X', 'Y', 'Z', 'E'};
 static float destination[NUM_AXIS] = {  0.0, 0.0, 0.0, 0.0};
 static float offset[3] = {0.0, 0.0, 0.0};
 static bool home_all_axis = true;
-static float feedrate = 1500.0, next_feedrate, saved_feedrate;
-static long gcode_N[BUFSIZE], gcode_LastN, Stopped_gcode_LastN = 0;
+static float feedrate = 1500.0;
+
 static const char bin_to_hex[] = "0123456789abcdef";
 
 static bool relative_mode = false;  //Determines Absolute or Relative Coordinates
 
+/** @brief The sequence numbers received per gcode line, needed for ACK to sender */
+static uint8_t gcodeline_sequence_number[BUFSIZE];
+
 static char command_buffer[BUFSIZE][MAX_CMD_SIZE];
-static int command_buffer_index_read = 0;
-static int command_buffer_index_write = 0;
-static int command_buffer_length = 0;
-static int serial_count = 0;
-static bool comment_mode = false;
+static uint8_t command_buffer_index_read = 0;
+static uint8_t command_buffer_index_write = 0;
+static uint8_t command_buffer_length = 0;
+
 static char *strchr_pointer; // just a pointer to find chars in the cmd string like X, Y, Z, E, etc
 
 static uint8_t tmp_extruder;
-
 
 static uint8_t Stopped = false;             // 0 == not stopped, other value == stop reason
 
@@ -195,6 +201,12 @@ static uint8_t second_color[EXTRUDERS][3];
 //=============================ROUTINES=============================
 //===========================================================================
 
+/** @brief The callback function to be executed when a packet has been read
+ *  @param packet The network packet received from the serial line
+ *  @return Returns True if the packet could be processed and added to the command buffer
+ */
+bool handle_packet(SerialProtocol::network_packet_t packet);
+
 void get_arc_coordinates();
 
 void serial_echopair_P(const char *s_P, float v)
@@ -213,52 +225,14 @@ void clear_command_queue()
 {
     if (is_command_queued())
     {
-        command_buffer_index_write = (command_buffer_index_read + 1)%BUFSIZE;
+        command_buffer_index_write = (command_buffer_index_read + 1) % BUFSIZE;
         command_buffer_length = 1;
     }
-}
-
-// Adds a command to the main command buffer
-// that's really done in a non-safe way.
-// Needs rework someday
-void enquecommand(const char *cmd)
-{
-  if(command_buffer_length < BUFSIZE)
-  {
-    // this is dangerous if a mixing of serial and this happens
-    strcpy(&(command_buffer[command_buffer_index_write][0]),cmd);
-    SERIAL_ECHO_START;
-    SERIAL_ECHOPGM("enqueing \"");
-    SERIAL_ECHO(command_buffer[command_buffer_index_write]);
-    SERIAL_ECHOLNPGM("\"");
-    command_buffer_index_write= (command_buffer_index_write + 1)%BUFSIZE;
-    command_buffer_length += 1;
-  }
-}
-
-void enquecommand_P(const char *cmd)
-{
-  if(command_buffer_length < BUFSIZE)
-  {
-    // this is dangerous if a mixing of serial and this happens
-    strcpy_P(&(command_buffer[command_buffer_index_write][0]),cmd);
-    SERIAL_ECHO_START;
-    SERIAL_ECHOPGM("enqueing \"");
-    SERIAL_ECHO(command_buffer[command_buffer_index_write]);
-    SERIAL_ECHOLNPGM("\"");
-    command_buffer_index_write= (command_buffer_index_write + 1)%BUFSIZE;
-    command_buffer_length += 1;
-  }
 }
 
 bool is_command_queued()
 {
     return command_buffer_length > 0;
-}
-
-uint8_t commands_queued()
-{
-    return command_buffer_length;
 }
 
 void setup_powerhold()
@@ -271,53 +245,104 @@ void setup_powerhold()
 
 void physicallyPowerDownMotorsAndHeaters()
 {
-  #if defined(PS_ON_PIN) && PS_ON_PIN > -1
+#if defined(PS_ON_PIN) && PS_ON_PIN > -1
     SET_OUTPUT(PS_ON_PIN);
     WRITE(PS_ON_PIN, PS_ON_ASLEEP);
-  #endif
+#endif
+    if (board_type == BOARD_REV_I)
+    {
+        //Board revision I has removed the safety circuit.
+        //This means SAFETY_TRIGGERED_PIN has to be turned as output and switched to HIGH.
+        //As this switches on the high end of the relay circuit, while the PS_ON_PIN switches on the low side.
+        WRITE(SAFETY_TRIGGERED_PIN, HIGH);
+    }
+}
+
+// Determine the printed circuit board revision type by reading the analog voltage on a defined pin.
+// This needs to be done to identify the board.
+// Note that we can only call analogRead() before temperatureInit() as temperatureInit takes over control of the ADC peripheral.
+void init_board_type()
+{
+    int16_t main_board_voltage = analogRead(MAIN_VOLTAGE_MEASURE_PIN);
+    if (abs(main_board_voltage - MAIN_BOARD_ADC_V2_0) < 50)
+    {
+        board_type = BOARD_V2_0;
+    }
+    else if (abs(main_board_voltage - MAIN_BOARD_ADC_V2_x) < 50)
+    {
+        board_type = BOARD_V2_X;
+    }
+    else if (abs(main_board_voltage - MAIN_BOARD_ADC_REV_I) < 50)
+    {
+        board_type = BOARD_REV_I;
+    }
+    else
+    {
+        board_type = BOARD_UNKNOWN;
+    }
+}
+
+char* code_value_ptr()
+{
+    return strchr_pointer + 1;
+}
+
+float code_value()
+{
+    return strtod(code_value_ptr(), NULL);
+}
+
+long code_value_long()
+{
+    return strtol(code_value_ptr(), NULL, 10);
+}
+
+bool code_seen(char code)
+{
+  strchr_pointer = strchr(command_buffer[command_buffer_index_read], code);
+  return (strchr_pointer != NULL);  //Return True if a character was found
 }
 
 void setup()
 {
-  setup_powerhold();
-  MYSERIAL.begin(BAUDRATE);
+    setup_powerhold();
+    MYSERIAL.begin(BAUDRATE);
 
-  SERIAL_ECHO_START;
-  SERIAL_ECHOLNPGM("BUILD:" __DATE__ " " __TIME__);
+    SERIAL_ECHO_START;
+    SERIAL_ECHOLNPGM("BUILD:" __DATE__ " " __TIME__);
 
-  watchdog_init();
-  i2cDriverInit();
-  initFans();   // Initialize the fan driver
-  initPCA9635();// Initialize the PCA9635 driver
-  tp_init();    // Initialize temperature loop
-  plan_init();  // Initialize planner
-  st_init();    // Initialize stepper, this enables interrupts!
+    init_board_type();      // Initialize the PCB revision. Must be called before temperatureInit() to have ADC access.
+    watchdog_init();
+    i2cDriverInit();
+    initFans();
+    initPCA9635();
+    temperatureInit();
+    plan_init();  // Initialize planner
+    st_init();    // Initialize stepper, this enables interrupts!
 #ifdef ENABLE_BED_LEVELING_PROBE
-  i2cCapacitanceInit();
+    i2cCapacitanceInit();
 #endif
-  i2cOneWireInit();
-  ledRGBWInit();
+    i2cOneWireInit();
+    ledRGBWInit();
 
-  SERIAL_PROTOCOLLNPGM("start");
+    SERIAL_PROTOCOLLNPGM("start");
 }
-
 
 void loop()
 {
-  if(command_buffer_length < (BUFSIZE-1))
-    get_command();
+    SerialProtocol::readCommand(handle_packet);
 
 #ifdef ENABLE_MONITOR_SERIAL_INPUT
   check_serial_input();
 #endif
 
-  if(command_buffer_length)
+  if (is_command_queued())
   {
     process_commands();
     if (is_command_queued())
     {
-      command_buffer_length = (command_buffer_length-1);
-      command_buffer_index_read = (command_buffer_index_read + 1)%BUFSIZE;
+      command_buffer_length--;
+      command_buffer_index_read = (command_buffer_index_read + 1) % BUFSIZE;
     }
   }
   //check heater every n milliseconds
@@ -340,126 +365,40 @@ void loop()
   }
 }
 
-void get_command()
+bool handle_packet(SerialProtocol::network_packet_t packet)
 {
-  while( MYSERIAL.available() > 0  && command_buffer_length < BUFSIZE) {
-    char serial_char = MYSERIAL.read();
-    if(serial_char == '\n' ||
-       serial_char == '\r' ||
-       (serial_char == ':' && comment_mode == false) ||
-       serial_count >= (MAX_CMD_SIZE - 1) )
+    if (command_buffer_length >= BUFSIZE)
     {
-      if (!serial_count) { //if empty line
-        comment_mode = false; //for new command
-        return;
-      }
-      command_buffer[command_buffer_index_write][serial_count] = 0; //terminate string
-      if (!comment_mode){
-        comment_mode = false; //for new command
-        gcode_N[command_buffer_index_write] = -1;
-        if (strchr(command_buffer[command_buffer_index_write], 'N') != NULL)
-        {
-          strchr_pointer = strchr(command_buffer[command_buffer_index_write], 'N');
-          gcode_N[command_buffer_index_write] = (strtol(strchr_pointer + 1, NULL, 10));
-          if (gcode_N[command_buffer_index_write] != gcode_LastN+1 && (strstr_P(command_buffer[command_buffer_index_write], PSTR("M110")) == NULL) ) {
-            SERIAL_PROTOCOL_ERROR_START;
-            SERIAL_PROTOCOL_ERRORPGM(MSG_ERR_LINE_NO);
-            SERIAL_PROTOCOL_ERRORLN(gcode_LastN);
-            FlushSerialRequestResend();
-            serial_count = 0;
-            return;
-          }
-
-          if (strchr(command_buffer[command_buffer_index_write], '*') != NULL)
-          {
-            byte checksum = 0;
-            byte count = 0;
-            while(command_buffer[command_buffer_index_write][count] != '*') checksum = checksum^command_buffer[command_buffer_index_write][count++];
-            strchr_pointer = strchr(command_buffer[command_buffer_index_write], '*');
-
-            if ( (int)(strtod(strchr_pointer + 1, NULL)) != checksum) {
-              SERIAL_PROTOCOL_ERROR_START;
-              SERIAL_PROTOCOL_ERRORPGM(MSG_ERR_CHECKSUM_MISMATCH);
-              SERIAL_PROTOCOL_ERRORLN(gcode_LastN);
-              FlushSerialRequestResend();
-              serial_count = 0;
-              return;
-            }
-            //if no errors, continue parsing
-          }
-          else
-          {
-            SERIAL_PROTOCOL_ERROR_START;
-            SERIAL_PROTOCOL_ERRORPGM(MSG_ERR_NO_CHECKSUM);
-            SERIAL_PROTOCOL_ERRORLN(gcode_LastN);
-            FlushSerialRequestResend();
-            serial_count = 0;
-            return;
-          }
-
-          gcode_LastN = gcode_N[command_buffer_index_write];
-          // if no errors, continue parsing
-        }
-        else  // if we don't receive 'N' but still see '*'
-        {
-          if ((strchr(command_buffer[command_buffer_index_write], '*') != NULL))
-          {
-            SERIAL_PROTOCOL_ERROR_START;
-            SERIAL_PROTOCOL_ERRORPGM(MSG_ERR_NO_LINENUMBER_WITH_CHECKSUM);
-            SERIAL_PROTOCOL_ERRORLN(gcode_LastN);
-            serial_count = 0;
-            return;
-          }
-        }
-        if ((strchr(command_buffer[command_buffer_index_write], 'G') != NULL)){
-          strchr_pointer = strchr(command_buffer[command_buffer_index_write], 'G');
-          switch((int)((strtod(strchr_pointer + 1, NULL)))){
-          case 0:
-          case 1:
-          case 2:
-          case 3:
-            if(Stopped) { // If printer is stopped by an error the G[0-3] codes are ignored.
-              SERIAL_ERRORLNPGM(MSG_ERR_STOPPED);
-            }
-            break;
-          default:
-            break;
-          }
-
-        }
-        command_buffer_index_write = (command_buffer_index_write + 1)%BUFSIZE;
-        command_buffer_length += 1;
-      }
-      serial_count = 0; //clear buffer
+        // No space, sorry,
+        return false;
     }
-    else
+
+    memcpy((void*)command_buffer[command_buffer_index_write], (void*)packet.payload, packet.payload_size);
+    command_buffer[command_buffer_index_write][packet.payload_size] = 0; //terminate string
+    gcodeline_sequence_number[command_buffer_index_write] = packet.sequence_number;
+
+    if (code_seen('G'))
     {
-      if (serial_char == ';') comment_mode = true;
-      if (!comment_mode) command_buffer[command_buffer_index_write][serial_count++] = serial_char;
+        switch (code_value_long())
+        {
+            case 0:
+            case 1:
+            case 2:
+            case 3:
+                if (Stopped)
+                { // If printer is stopped by an error the G[0-3] codes are ignored.
+                    SERIAL_ERRORLNPGM(MSG_ERR_STOPPED);
+                }
+                break;
+            default:
+                break;
+        }
     }
-  }
-}
 
+    command_buffer_index_write = (command_buffer_index_write + 1) % BUFSIZE;
+    command_buffer_length++;
 
-float code_value()
-{
-  return (strtod(&command_buffer[command_buffer_index_read][strchr_pointer - command_buffer[command_buffer_index_read] + 1], NULL));
-}
-
-long code_value_long()
-{
-  return (strtol(&command_buffer[command_buffer_index_read][strchr_pointer - command_buffer[command_buffer_index_read] + 1], NULL, 10));
-}
-
-char* code_value_ptr()
-{
-    return &command_buffer[command_buffer_index_read][strchr_pointer - command_buffer[command_buffer_index_read] + 1];
-}
-
-bool code_seen(char code)
-{
-  strchr_pointer = strchr(command_buffer[command_buffer_index_read], code);
-  return (strchr_pointer != NULL);  //Return True if a character was found
+    return true;
 }
 
 #define DEFINE_PGM_READ_ANY(type, reader)       \
@@ -593,7 +532,7 @@ void process_commands()
 {
   if(code_seen('G'))
   {
-    switch((int)code_value())
+    switch(code_value_long())
     {
     case 0: // G0 -> G1
     case 1: // G1
@@ -615,6 +554,7 @@ void process_commands()
       }
       break;
     case 28: // G28 - Home all Axis one at a time
+      float saved_feedrate;
 #ifdef ENABLE_BED_LEVELING_PROBE
       planner_bed_leveling_factor[X_AXIS] = 0.0;
       planner_bed_leveling_factor[Y_AXIS] = 0.0;
@@ -751,8 +691,8 @@ void process_commands()
         float move_distance = CONFIG_BED_LEVELING_Z_MOVE_DISTANCE;  // move distance
         float extra_z_move = 0; // extra z measurement distance for testing (used during debugging)
 
-        if (code_seen('F')) probe_feedrate = code_value();
-        if (code_seen('V')) verbosity = code_value();
+        if (code_seen('F')) probe_feedrate = code_value_long();
+        if (code_seen('V')) verbosity = code_value_long();
         if (code_seen('D')) move_distance = code_value();
         if (code_seen('Z')) extra_z_move = code_value();
 
@@ -765,7 +705,7 @@ void process_commands()
       {
         int verbosity = 0;
 
-        if (code_seen('V')) verbosity = code_value();
+        if (code_seen('V')) verbosity = code_value_long();
 
         i2cCapacitanceReset();
         i2cCapacitanceInit();
@@ -1084,6 +1024,14 @@ void process_commands()
       case 80: // M80  - Turn on Power Supply (ATX Power On)
         SET_OUTPUT(PS_ON_PIN); //GND
         WRITE(PS_ON_PIN, PS_ON_AWAKE);
+        if (board_type == BOARD_REV_I)
+        {
+            //Board revision I has removed the safety circuit.
+            //This means SAFETY_TRIGGERED_PIN has to be turned as output and switched to LOW.
+            //As this switches on the high end of the relay circuit, while the PS_ON_PIN switches on the low side.
+            SET_OUTPUT(SAFETY_TRIGGERED_PIN);
+            WRITE(SAFETY_TRIGGERED_PIN, LOW);
+        }
         break;
       #endif
 
@@ -1161,6 +1109,13 @@ void process_commands()
 
       SERIAL_PROTOCOLLN("");
       break;
+    case 115: // M115 - Get Firmware Version and Capabilities
+        SERIAL_ECHOPGM(" MACHINE_TYPE:UM3");
+        SERIAL_ECHOPGM(" PCB_ID:");
+        SERIAL_ECHO(int(board_type));
+        SERIAL_ECHOLNPGM(" BUILD:\"" __DATE__ " " __TIME__ "\"");
+
+        break;
     case 119: // M119 - Output Endstop status to serial port
         //SERIAL_PROTOCOLLN(MSG_M119_REPORT);
 #if (X_MIN_PIN > -1)
@@ -1342,8 +1297,11 @@ void process_commands()
     case 302: // M302 - Allow cold extrudes, or set the minimum extrude S<temperature>
     {
       float temp = .0;
-      if (code_seen('S')) temp=code_value();
-        set_extrude_min_temp(temp);
+      if (code_seen('S'))
+      {
+          temp = code_value();
+      }
+      set_extrude_min_temp(temp);
     }
     break;
     #endif
@@ -1444,6 +1402,17 @@ void process_commands()
     case 401: // M401 - Quickstop - Abort all the planned moves. This will stop the head mid-move, so most likely the head will be out of sync with the stepper position after this
     {
       quickStop();
+      // quickStop synchronizes current position with the stepper position.
+      // so this reports the position we stopped at back to opinicus, nozzle switching during printing should not
+      // be a problem as the switching procedure is unabortable.
+      SERIAL_PROTOCOLPGM("X");
+      MSerial.print(current_position[X_AXIS], 3);
+      SERIAL_PROTOCOLPGM(" Y");
+      MSerial.print(current_position[Y_AXIS], 3);
+      SERIAL_PROTOCOLPGM(" Z");
+      MSerial.print(current_position[Z_AXIS], 3);
+      SERIAL_PROTOCOLPGM(" E");
+      MSerial.println(current_position[E_AXIS], 3);
     }
     break;
     case 907: // M907 - Set digital trimpot motor current using axis codes
@@ -1468,11 +1437,8 @@ void process_commands()
     case 999: // M999 - Restart after being stopped by error
     {
       Stopped = false;
-      gcode_LastN = Stopped_gcode_LastN;
-      FlushSerialRequestResend();
     }
     break;
-    
     case 12000: // M12000 - Set build volume maximum size.
     {
         if (code_seen('X'))
@@ -1522,6 +1488,12 @@ void process_commands()
         }
     }
     break;
+    case 12003: //M12003 - Get board type for debugging goals
+    {
+        SERIAL_ECHO_START;
+        SERIAL_ECHOLN(int(board_type));
+    }
+    break;
     }
   }
 
@@ -1533,7 +1505,7 @@ void process_commands()
       bool make_move = false;
       if(code_seen('F')) {
         make_move = true;
-        next_feedrate = code_value();
+        float next_feedrate = code_value();
         if(next_feedrate > 0.0) {
           feedrate = next_feedrate;
         }
@@ -1561,18 +1533,6 @@ void process_commands()
     SERIAL_ECHOLNPGM("\"");
   }
 
-  ClearToSend();
-}
-
-void FlushSerialRequestResend()
-{
-  SERIAL_PROTOCOLPGM(MSG_RESEND);
-  SERIAL_PROTOCOLLN(gcode_LastN + 1);
-  SERIAL_PROTOCOLLNPGM(MSG_OK);
-}
-
-void ClearToSend()
-{
   SERIAL_PROTOCOL_OK_LN();
 }
 
@@ -1605,7 +1565,7 @@ void get_coordinates()
     }
     if(code_seen('F'))
     {
-        next_feedrate = code_value();
+        float next_feedrate = code_value();
         if(next_feedrate > 0.0)
             feedrate = next_feedrate;
     }
@@ -1662,14 +1622,17 @@ void prepare_arc_move(char isclockwise) {
 
 void manage_inactivity()
 {
-  #if defined(SAFETY_TRIGGERED_PIN) && SAFETY_TRIGGERED_PIN > -1
-  if (READ(SAFETY_TRIGGERED_PIN))
-  {
-    Stop(STOP_REASON_SAFETY_TRIGGER);
-  }
-  #endif
-  check_axes_activity();
-  pulseLeds();
+#if defined(SAFETY_TRIGGERED_PIN) && SAFETY_TRIGGERED_PIN > -1
+    //Check if the safety pin was triggered. Revision I or newer boards no longer have the safety circuit, and abuse this pin to turn on the relay.
+    //So we do not need this check for RevI boards.
+    if (board_type != BOARD_REV_I && READ(SAFETY_TRIGGERED_PIN))
+    {
+        Stop(STOP_REASON_SAFETY_TRIGGER);
+    }
+#endif
+    check_axes_activity();
+    pulseLeds();
+    updatePCA9635();
 }
 
 void Stop(uint8_t reasonNr)
@@ -1678,7 +1641,6 @@ void Stop(uint8_t reasonNr)
     if(Stopped == false)
     {
         Stopped = reasonNr;
-        Stopped_gcode_LastN = gcode_LastN; // Save last g_code for restart
 
         // no message otherwise griffin would report another error...
         if (reasonNr != STOP_REASON_GCODE)

@@ -57,8 +57,10 @@
 #define SERIAL_PROTOCOLPGM(x) serialprintPGM(PSTR(x));
 #define SERIAL_PROTOCOLLN(x) do {MYSERIAL.print(x);MYSERIAL.write('\n');} while(0)
 #define SERIAL_PROTOCOLLNPGM(x) do{serialprintPGM(PSTR(x));MYSERIAL.write('\n');} while(0)
-#define SERIAL_PROTOCOL_OK() do{serialprintPGM(PSTR(MSG_OK " N")); MYSERIAL.print(gcode_N[command_buffer_index_read]); serialprintPGM(PSTR(" P")); MYSERIAL.print(int(BLOCK_BUFFER_SIZE - movesplanned() - 1)); }while(0)
+#define SERIAL_PROTOCOL_OK() do{serialprintPGM(PSTR(MSG_OK " N")); MYSERIAL.print(int(gcodeline_sequence_number[command_buffer_index_read])); serialprintPGM(PSTR(" P")); MYSERIAL.print(int(BLOCK_BUFFER_SIZE - movesplanned() - 1)); }while(0)
 #define SERIAL_PROTOCOL_OK_LN() do{SERIAL_PROTOCOL_OK(); MYSERIAL.println(); }while(0)
+/* Converts the sequence number (byte) to int */
+#define SERIAL_PROTOCOL_BYTE_AS_NR_LN(x) SERIAL_PROTOCOLLN(int(x))
 
 const char errormagic[] PROGMEM ="\nError:";
 const char perrormagic[] PROGMEM ="ProtoErr:";
@@ -157,8 +159,6 @@ void manage_inactivity();
 #define NUM_AXIS 4 // The axis order in all axis related arrays is X, Y, Z, E
 enum AxisEnum {X_AXIS=0, Y_AXIS=1, Z_AXIS=2, E_AXIS=3};
 
-
-void FlushSerialRequestResend();
 void ClearToSend();
 
 void get_coordinates();
@@ -183,8 +183,6 @@ bool IsStopped();
 uint8_t StoppedReason();
 
 void clear_command_queue();
-void enquecommand(const char *cmd); //put an ascii command at the end of the current buffer.
-void enquecommand_P(const char *cmd); //put an ascii command at the end of the current buffer, read from flash
 bool is_command_queued();
 uint8_t commands_queued();
 void prepare_arc_move(char isclockwise);
@@ -193,10 +191,16 @@ void prepare_arc_move(char isclockwise);
 void setPwmFrequency(uint8_t pin, int val);
 #endif
 
-#ifndef CRITICAL_SECTION_START
-  #define CRITICAL_SECTION_START  unsigned char _sreg = SREG; cli();
-  #define CRITICAL_SECTION_END    SREG = _sreg;
-#endif //CRITICAL_SECTION_START
+/** Enum for different board variations. There are a few slightly different variants on the boards, the board type can be used to react differently for these boards. */
+enum BoardType
+{
+    BOARD_UNKNOWN,  //Board type cannot be discovered. Newer board, or something is wrong with the board/power supply.
+    BOARD_V2_0,     //Initial prototype board for the Ultimaker 3. Not used in the field. Has 8 microsteps on the Z axis.
+    BOARD_V2_X,     //Initial production board for the Ultimaker 3. Has 16 microsteps on the Z.
+    BOARD_REV_I     //Update of the Ultimaker 3 board. Removes all unused components. This requires slightly different safety circuit handling.
+};
+
+extern BoardType board_type;
 
 extern float homing_feedrate[];
 extern bool axis_relative_modes[];

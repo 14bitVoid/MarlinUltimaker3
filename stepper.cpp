@@ -282,7 +282,7 @@ FORCE_INLINE unsigned short calc_timer(unsigned short step_rate) {
     timer = (unsigned short)pgm_read_word_near(table_address);
     timer -= (((unsigned short)pgm_read_word_near(table_address+2) * (unsigned char)(step_rate & 0x0007))>>3);
   }
-  if(timer < 100) { timer = 100; MYSERIAL.print(MSG_STEPPER_TOO_HIGH); MYSERIAL.println(step_rate); }//(20kHz this should never happen)
+  if(timer < 100) { timer = 100; SERIAL_ECHO_START; SERIAL_ECHOPGM(MSG_STEPPER_TOO_HIGH); MYSERIAL.println(step_rate); }//(20kHz this should never happen)
   return timer;
 }
 
@@ -532,7 +532,9 @@ ISR(TIMER1_COMPA_vect)
     // Hack to address stuttering caused by ISR not finishing in time.
     // When the ISR does not finish in time, the timer will wrap in the computation of the next interrupt time.
     // This hack replaces the correct (past) time with a time not far in the future.
-    OCR1A = max(OCR1A, TCNT1 + 16);
+    // (Note that OCR1A and TCNT1 are registers, so using the max() macro or std::max() can cause problems, especially when compiling the simulator)
+    if (OCR1A < TCNT1 + 16)
+        OCR1A = TCNT1 + 16;
 
     // If current block is finished, reset pointer
     if (step_events_completed >= current_block->step_event_count) {
@@ -711,21 +713,23 @@ void st_synchronize()
  */
 void st_set_position(const long &x, const long &y, const long &z, const long &e)
 {
-  st_synchronize(); // Bad to set stepper counts in the middle of a move
+    st_synchronize(); // Bad to set stepper counts in the middle of a move
 
-  CRITICAL_SECTION_START;
-  count_position[X_AXIS] = x;
-  count_position[Y_AXIS] = y;
-  count_position[Z_AXIS] = z;
-  count_position[E_AXIS] = e;
-  CRITICAL_SECTION_END;
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+    {
+        count_position[X_AXIS] = x;
+        count_position[Y_AXIS] = y;
+        count_position[Z_AXIS] = z;
+        count_position[E_AXIS] = e;
+    }
 }
 
 void st_set_e_position(const long &e)
 {
-  CRITICAL_SECTION_START;
-  count_position[E_AXIS] = e;
-  CRITICAL_SECTION_END;
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+    {
+        count_position[E_AXIS] = e;
+    }
 }
 
 /**
@@ -733,10 +737,12 @@ void st_set_e_position(const long &e)
  */
 long st_get_position(uint8_t axis)
 {
-  CRITICAL_SECTION_START;
-  long count_pos = count_position[axis];
-  CRITICAL_SECTION_END;
-  return count_pos;
+    long count_pos;
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+    {
+        count_pos = count_position[axis];
+    }
+    return count_pos;
 }
 
 void finishAndDisableSteppers()

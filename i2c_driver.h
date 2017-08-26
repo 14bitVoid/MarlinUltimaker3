@@ -13,7 +13,7 @@ It has the following design considerations:
 * Priorities: Some I2C communication is more important than others, schedule the next action on priority.
 */
 
-const uint32_t I2C_CLOCK_FREQUENCY = 400000;  //Clock frequency of the I2C driver. Most chips support both 100khz and 400khz operation.
+const uint32_t I2C_CLOCK_FREQUENCY = 100000;  //Clock frequency of the I2C driver. Most chips support both 100khz and 400khz operation.
 const uint8_t I2C_WRITE_BIT = 0x00;
 const uint8_t I2C_READ_BIT = 0x01;
 

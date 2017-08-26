@@ -50,9 +50,13 @@
 #define SAFETY_TRIGGERED_PIN     28 //PIN to detect the safety circuit has triggered
 
 // Analog PIN to measure the main voltage
-// Connected to 24V - 100k -|- 4k7 - GND = ADC ~221 on Ultimaker 2.0 board with 8 microsteps on the Z
-// Connected to 24V - 100k -|- 10k - GND = ADC ~447 ADC on Ultimaker 2.x board with 16 microsteps on the Z
 #define MAIN_VOLTAGE_MEASURE_PIN 14
+// Connected to 24V - 100k -|- 4k7  - GND = ADC ~221 on Ultimaker 2.0 board
+#define MAIN_BOARD_ADC_V2_0 221
+// Connected to 24V - 100k -|- 10k  - GND = ADC ~447 ADC on Ultimaker 2.x board
+#define MAIN_BOARD_ADC_V2_x 447
+// Connected to 24V - 100k -|- 14k7 - GND = ADC ~630 ADC on Ultimaker board revision I
+#define MAIN_BOARD_ADC_REV_I 630
 
 #define MOTOR_CURRENT_PWM_XY_PIN 44
 #define MOTOR_CURRENT_PWM_Z_PIN 45

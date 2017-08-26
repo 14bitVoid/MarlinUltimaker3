@@ -13,6 +13,10 @@
 #define I2C_SCL_PIN   21
 #endif
 
+//Clock frequency of the I2C driver during clock recovery. We use a higher rate here then during normal operation,
+// as we are just trying to recover the clock. Introduced errors are no problem, and as we are doing this in an interrupt, we want to do it as fast as possible.
+const uint32_t I2C_CLOCK_RECOVERY_FREQUENCY = 400000;  
+
 static uint8_t current_command_buffer_index;
 static i2cCommand* volatile current_command;
 static i2cCommand* volatile command_queue;
@@ -24,7 +28,7 @@ static bool i2c_broken = false;
  */
 static FORCE_INLINE void i2cClockDelay()
 {
-    _delay_us(1000000/I2C_CLOCK_FREQUENCY);
+    _delay_us(1000000/I2C_CLOCK_RECOVERY_FREQUENCY);
 }
 
 /* I2C clock recovery.
@@ -95,7 +99,6 @@ static void i2cDriverExecuteNextCommand()
         current_command = command_queue;
         command_queue = command_queue->next;
         current_command_buffer_index = 0;
-        i2cCheckForClockRecovery(); //Before generating a start condition, check if the bus is free.
         TWCR = _BV(TWIE) | _BV(TWEN) | _BV(TWSTA) | _BV(TWINT); //START will be transmitted, interrupt will be generated.
     }else{
         current_command = NULL;
@@ -257,6 +260,7 @@ ISR(TWI_vect, ISR_BLOCK)
         //Release the TWI module and restart it. So we can become a new master again. (This can happen due to noise on the line)
         TWCR = 0;
         TWCR = _BV(TWIE) | _BV(TWEN);
+        i2cCheckForClockRecovery(); //Before generating a start condition, check if the bus is free.
         TWCR = _BV(TWIE) | _BV(TWEN) | _BV(TWSTA) | _BV(TWINT); //START will be transmitted
         current_command_buffer_index = 0;
         break;

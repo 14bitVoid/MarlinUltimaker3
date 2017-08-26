@@ -70,14 +70,15 @@
 // using a ring buffer (I think), in which rx_buffer_head is the index of the
 // location to which to write the next incoming character and rx_buffer_tail
 // is the index of the location from which to read.
+// 256 is the max limit due to uint8_t head and tail. Use only powers of 2. (...,16,32,64,128,256)
 #define RX_BUFFER_SIZE 128
 
 
 struct ring_buffer
 {
   unsigned char buffer[RX_BUFFER_SIZE];
-  int head;
-  int tail;
+  volatile uint8_t head;
+  volatile uint8_t tail;
 };
 
 #if UART_PRESENT(SERIAL_PORT)
@@ -100,11 +101,13 @@ class MarlinSerial //: public Stream
       return (unsigned int)(RX_BUFFER_SIZE + rx_buffer.head - rx_buffer.tail) % RX_BUFFER_SIZE;
     }
 
-    FORCE_INLINE void write(uint8_t c)
+    FORCE_INLINE void write(const uint8_t c)
     {
+      /* Wait for empty transmit buffer */
       while (!((M_UCSRxA) & (1 << M_UDREx)))
         ;
 
+      /* Put data into buffer, sends the data */
       M_UDRx = c;
     }
 
@@ -113,7 +116,7 @@ class MarlinSerial //: public Stream
     {
       if((M_UCSRxA & (1<<M_RXCx)) != 0) {
         unsigned char c  =  M_UDRx;
-        int i = (unsigned int)(rx_buffer.head + 1) % RX_BUFFER_SIZE;
+        uint8_t i = (uint16_t(rx_buffer.head) + 1) % RX_BUFFER_SIZE;
 
         // if we should be storing the received character into the location
         // just before the tail (meaning that the head would advance to the
@@ -154,7 +157,7 @@ class MarlinSerial //: public Stream
       }
     }
 
-    FORCE_INLINE void print(const char *str)
+    FORCE_INLINE void print(const char* const str)
     {
       write(str);
     }
